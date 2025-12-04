@@ -1,0 +1,143 @@
+html, body {
+    /*width: 1920px;*/
+    /*height: 1080px;*/
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    color: #ddd;
+    /*overflow: hidden;*/
+}
+
+#wrapper-main {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #00B140;
+    /*overflow: hidden;*/
+}
+
+#authorize-button {
+    position: absolute;
+    bottom: 3%;
+    right: 2%;
+    z-index: 99;
+}
+
+#wrapper-youtube {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+/*    border-radius: 16px;*/
+    z-index: 1;
+/*    transition: filter 10s swing 0s;*/
+}
+
+#wrapper-label {
+    position: absolute;
+    bottom: 4.777%;
+    right: 1.555%;
+    z-index: 3;
+    padding: 1% 1%;
+    background: #2f2f2f;
+    border-radius: 1%;
+    /*box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.888);*/
+    max-width: 92%;
+    text-align: right;
+/*    opacity: 0.999;*/
+}
+
+.artist {
+    color: #aaa;
+    font-size: 32px;
+    font-weight: bold;
+    font-family: 'Montserrat', sans-serif;
+    box-shadow: none;
+    padding-bottom: 0;
+    text-transform: capitalize;
+}
+
+.song {
+    color: #ccc;
+    font-size: 32px;
+    font-style: italic;
+/*    font-weight: bolder;*/
+    font-family: 'Oswald', sans-serif;
+    box-shadow: none;
+    /*margin-right: 4%;*/
+    padding-top: 0;
+    margin-top: -4px;
+    text-transform: capitalize;
+}
+
+.req {
+    /*padding-top: 2px;*/
+    /*margin-right: 8px;*/
+    color: #aaa;
+    font-size: 26px;
+/*    font-weight: bold;*/
+    font-family: 'Montserrat', sans-serif;
+    box-shadow: none;
+}
+
+#progress {
+    bottom: 0;
+    left: 0;
+    z-index: 5;
+    position: absolute;
+    height: 1%;
+    width: 0;
+    background-color: purple;
+    opacity: 0.777;
+}
+
+#showImage {
+    z-index: 2;
+    position: absolute;
+    top: 5%;
+    left: 25%;
+    width: 50%;
+    height: auto;
+    max-height: 90%;
+    display: none; 
+    border-radius: 1%;
+}
+
+/*
+#playingLabel {
+    position: absolute;
+    bottom: 48px;
+    left: 0;
+    width: 100%;
+    height: 116px;
+    overflow: hidden;
+    text-align: center;
+    font-size: xx-large;
+}
+
+#playingLabel h2 {
+    font-family: 'Montserrat', sans-serif;
+    text-shadow: none !important;
+    color: #00008B;
+}
+
+*/
+
+@keyframes cycleColors {
+    0% { color: white; }
+    30% { color: lightred; }
+    60% { color: lightgreen; }
+    90% { color: lightblue; }
+    100% { color: white; }
+}
+
+.cycling-text {
+    animation: cycleColors 22s infinite linear;
+}
+.cycling-text-slow {
+    animation: cycleColors 33s infinite linear;
+}

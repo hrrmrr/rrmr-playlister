@@ -1,0 +1,817 @@
+<html>
+	<head>
+		<meta charset="UTF-8" />
+
+	    <script type="text/javascript" src="https://code.jquery.com/jquery-3.7.1.min.js"> </script>
+	    <script type="text/javascript" src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"> </script>
+	    <script type="text/javascript" src="https://apis.google.com/js/api.js"> </script>
+		<script src="/js/fixTitle.js"> </script>
+
+		<link rel="stylesheet" href="styles.css" />
+    	<link href="https://fonts.googleapis.com/css2?family=Oswald&family=Montserrat&display=swap" rel="stylesheet">
+
+		<title>RRMR Playlister</title>
+	</head>
+
+	<body>
+		<div id="wrapper-main">
+			<div id="wrapper-youtube"> </div>
+			<div id="wrapper-label">
+		        <div class="artist">Artist Name</div>
+		        <div class="song">Song Title</div>
+		        <div class="req">@requester</div>
+			</div>
+			<div id="progress"> </div>
+			<img id="showImage" src="logo.png" />
+		</div>
+	</body>
+
+	<script>
+		const YOUTUBE_API_KEY = '';		// REQUIRED!
+		const COUNTRY_CODE = 'US';		// Two-letter abbreviation for country you're streaming from (UPPERCASE)
+
+		// Value should match (or slightly exceed) LATENCY_MS in reqbot.js
+		const LATENCY_MS = 15555;		// How long to wait after starting a video to before cycling favorites
+
+		// Value should match SHORTS_LEN_SS in reqbot.js
+		const SHORTS_LEN_SS = 100;		// Max. video length (in seconds) to be considered a "short", 0 to disable
+
+		const DISCORD_SERVER_ID = '';	// Full (numeric) ID of your discord server
+		const DISCORD_CHANNEL_ID = '';	// Full (numeric) ID of channel on your server to save favorites
+		const DISCORD_UNSORTED_THREAD_ID = '';	// Full (numeric) ID of the thread in above channel to save the unsorted
+
+		const userThreads = {};			// Structure to map usernames to discord thread IDs
+		userThreads['username'] = '1234567890123456789';	// an example of syntax
+
+		///////////////// Modify below this line with care. /////////////////
+		var musics = {};
+		musics.song = {};
+		musics.lastSong = {};
+		musics.doBreak = true;	// wait for !skip after playing first filler vid
+
+		musics.ytFull = { bottom: 0, left: 0, width: '100%', height: '100%' };
+		musics.ytCompact = { bottom: '1.333%', left: '1%', width: '13.25%', height: '25.777%' };
+
+		musics.playerReady = function(event) { 
+			event.target.setVolume(100);
+			event.target.setPlaybackQuality('hd1080');
+			event.target.playVideo();
+
+			setInterval(() => {
+    			try {
+    				let cur = musics.yt.getCurrentTime();
+    				let dur = musics.yt.getDuration();
+
+    				if ($.isNumeric(cur) && $.isNumeric(dur) && dur > 0) {
+    					let per = (cur / dur) * 100;
+    					let dif = dur - cur;
+
+    					if (dur > SHORTS_LEN_SS) {
+		    				if (cur <= 1) $("#wrapper-youtube").stop().fadeIn(4444);
+		    				else if (dif <= 3 && dif > 2) $("#wrapper-youtube").stop().fadeOut(2222);
+    					}
+    					else {
+		    				if (cur <= 1 && cur <= 2) $("#wrapper-youtube").stop().fadeIn(444);
+	    					else if (dif <= 2 && dif > 1) $("#wrapper-youtube").stop().fadeOut(1000);
+	    					// else if (dif <= 1) $("#wrapper-youtube").stop().fadeOut(333);
+    					}
+
+	    				
+	    				if (dif <= 1)
+	    					$("#progress").stop().animate({"width" : '100%'}, 999, 'linear');
+	    				else
+	    					$("#progress").stop().animate({"width" : per + '%'}, 999, 'linear');
+    				}
+	    			// else
+	    			// 	$("#progress").stop().animate({"width" : '0'}, 999, 'linear');
+
+			    } catch (error) { console.log('trycatch error for #progress'); }
+			}, 1000);
+		}
+
+/*
+Returns the state of the player. Possible values are:
+-1 – unstarted
+0 – ended
+1 – playing
+2 – paused
+3 – buffering
+5 – video cued
+*/
+		musics.playerStateChange = function(event) {
+//console.log('playerStateChange', event, event.target.options.videoId);
+			if (event.data == 0) {			// stopped
+				// $('#wrapper-youtube').stop().css({ opacity: 0 });
+
+				if (musics.doBreak) musics.doBreak = false;
+				else requestNext();
+			}
+			else if (event.data == 1) {		// playing
+				if ($("#wrapper-label div.req").text() != "")	// only report if there's a requester
+					$.ajax({
+						dataType: 'json'
+						, url: 'playing'
+						, success: function (result) { }
+					});
+			}
+			// else if (event.data == 2) {		// paused
+			// }
+			else if (event.data == 3) {		// buffering
+				event.target.setVolume(100);
+			}
+		}
+
+		musics.onError = function(event) { 
+			// alert('youtube error!');
+			console.log('youtube error!', event);
+
+			let req = $("#wrapper-label div.req").text();
+			if (req == "" || req == "rrmr1") {
+				 // got an error during a bumper or auto-req, just show some kittens
+				$("#wrapper-label div.artist").text("");
+				$("#wrapper-label div.song").text("Something went wrong, so here's kittens!");
+				$("#wrapper-label div.req").text("").hide();
+
+				$('#wrapper-youtube').css(musics.ytFull);
+				musics.yt.loadVideoById({ 'videoId': "RacCtKKZ02A" });
+			}
+			else {
+				// only report error if there's a requester
+				$.ajax({
+					dataType: 'json'
+					, url: 'playerror'
+					, success: function (result) { }
+				});
+
+		        setTimeout(function() { requestNext(); }, 1111);
+			}
+		}
+
+		function requestNext() {
+			if (musics.song.title && musics.song.id_yt) {
+				setTimeout(function() {
+					musics.lastSong.title = musics.song.title;
+					musics.lastSong.id_yt = musics.song.id_yt;
+					musics.lastSong.requester = musics.song.requester;
+					musics.lastSong.votes = musics.song.votes.slice();
+				}, LATENCY_MS);
+			}
+			
+			$.ajax({
+				dataType: 'json'
+				, url: 'next'
+				, success: function (result) {
+					if (result.error && result.error == "norequests") {
+console.log('no requests!');
+						// no requests in queue!
+						$("#wrapper-label div.artist").text("");
+						$("#wrapper-label div.song").text("Waiting for requests...");			
+						$("#wrapper-label div.req").text("").hide();
+						
+						$('#wrapper-youtube').css(musics.ytFull);
+						musics.yt.loadVideoById({ 'videoId': "RacCtKKZ02A" });	// kittens
+					}
+					else {
+console.log('requestNext() result', result);						
+						if (result.title.indexOf(' - ') != -1) {
+							let tits = result.title.split(' - ');
+
+							if (tits[0].length > 33) tits[0] = tits[0].substr(0, 33).trim() + "…";
+							if (tits[1].length > 40) tits[1] = tits[1].substr(0, 40).trim() + "…";
+
+							$("#wrapper-label div.artist").text(tits[0]);
+							$("#wrapper-label div.song").text(tits[1]);
+						}
+						else {
+							let tit = result.title;
+							if (tit.length > 40) tit = tit.substr(0, 40) + "…";
+
+							$("#wrapper-label div.artist").text("");
+							$("#wrapper-label div.song").text(tit);
+						}
+
+						if (result.requester && result.requester != '')
+							$("#wrapper-label div.req").text("@" + result.requester).show();
+						else 
+							$("#wrapper-label div.req").text("").hide();
+
+						// musics.song = {};
+						setTimeout(function() {
+							musics.song.title = result.title;
+							musics.song.id_yt = result.id_yt;
+							musics.song.requester = result.requester;
+							musics.song.is_video = result.is_video;
+							musics.song.votes = [];
+						}, LATENCY_MS);
+
+						if (result.is_video) $('#wrapper-youtube').css(musics.ytFull);		
+						else $('#wrapper-youtube').css(musics.ytCompact);		
+
+						if (result.startSeconds)
+							setTimeout(function() { $("#wrapper-youtube").stop().fadeIn(3333); }, 1111);
+						else
+							result.startSeconds = 0;
+
+						musics.yt.loadVideoById({ 'videoId': result.id_yt, startSeconds: result.startSeconds });
+					}
+				}
+			});
+		}
+
+		function onYouTubeIframeAPIReady() {
+			musics.yt = new YT.Player('wrapper-youtube', { videoId: 'IxOr3T32QAc', startSeconds: 0, playerVars: { 'playsinline': 1, 'controls': 0, 'disablekb': 1, 'enablejsapi': 1, 'fs': 0, 'iv_load_policy': 3, 'modestbranding': 1, 'mute': 0, 'rel': 0, 'showinfo': 0 }, events: { 'onReady': musics.playerReady, 'onStateChange': musics.playerStateChange, 'onError': musics.onError } });
+		};
+
+
+		String.prototype.toSS = function () { 
+			// expects youtube's funky format: 
+			// E.g. PT15M51S  (https://developers.google.com/youtube/v3/docs/videos#contentDetails)
+			var str = this.replace('PT', '');
+
+			var hours = str.split('H')[0];
+			if (hours == str) hours = 0;
+			else str = str.replace(hours + 'H', '');
+
+			var minutes = str.split('M')[0];
+			if (minutes == str) minutes = 0;
+			else str = str.replace(minutes + 'M', '');
+
+			var seconds = str.split('S')[0];
+			if (seconds == str) seconds = 0;
+			else str = str.replace(seconds + 'S', '');
+
+			return (parseInt(hours) * 3600) + (parseInt(minutes) * 60) + parseInt(seconds);
+		}
+
+
+		// musics.curTitle = '';
+		musics.ytSearch = function(json) {
+	        $.ajax({
+	          dataType: 'json'
+	          , url:                          // youtube API v3
+	            'https://www.googleapis.com/youtube/v3/search?part=snippet'	
+	            + '&maxResults=7&order=relevance&safeSearch=moderate&type=video'
+	            + '&videoSyndicated=true&videoEmbeddable=true'
+	            + '&topicId=/m/04rlf'
+	            + '&key=' + YOUTUBE_API_KEY
+	        	+ '&q=' + encodeURIComponent(json.query)
+
+	            , success: function(ytjson) {
+	console.log('youtube search', ytjson.items);		                    	
+	                if (ytjson.items != null && ytjson.items.length > 0) {
+	                	const ignored = ['the', 'and', 'official', 'audio', 'video', 'mv', 'pv', 'hd', 'remaster', 'digital', 'analog', 'stereo', 'mono'];
+	                	let words = json.query.toLowerCase().split(" ");
+	                	let highScore = 2 + words.length;
+	                	let wIndx = -1;
+
+	                    $.each(ytjson.items, function(idx, track) {
+	                    	let score = 0;
+	                    	let channelTitle = track.snippet.channelTitle.toLowerCase();
+	                    	let description = track.snippet.description.toLowerCase();
+	                    	let title = track.snippet.title.toLowerCase();
+
+	                        $.each(words, function(wIdxi, word) {
+	                        	if (!ignored.includes(word) && word.length > 2) {
+	                        		if (channelTitle.indexOf(word) != -1) score+=2;
+	                        		if (title.indexOf(word) != -1) score+=2;
+	                        		if (description.indexOf(word) != -1) score++;
+	                        	}
+	                        });
+
+	                        // deduct 2 points for every word in the title NOT in the search query
+	                        let titWords = title.toLowerCase().split(" ");
+	                        let lowerTit = json.query.toLowerCase();
+	                        $.each(titWords, function(wIdxii, word) {
+	                        	word = word.replace(/[()\[\]\-_"]/g, "");
+
+	                        	if (
+	                        		!ignored.includes(word) 
+	                        		&& word.length > 2
+	                        		&& lowerTit.indexOf(word) == -1
+	                        		&& !$.isNumeric(word)
+	                        	)
+	                        		score-=2;
+	                        });
+
+	                		if (description.indexOf("provided to youtube by ") != -1) score+=3;
+	                		if (title.indexOf("official") != -1) score+=2;
+	                		if (title.indexOf("video") != -1) score+=2;
+
+	                		if (title.indexOf("remaster") != -1) score+=2;
+	                		else if (description.indexOf("remaster") != -1) score++;
+
+
+	                		// always omit shorts
+	                		if (description.indexOf("#short") != -1) score = 0;
+	                		else if (title.indexOf("#short") != -1) score = 0;
+	                		else if (
+	                			!words.includes('live')
+	                			&& !words.includes('alive')
+	                			&& title.indexOf("live") != -1
+	                			&& !title.indexOf("alive") != -1
+	                		)
+	                			score = 0;
+							
+	                        if (score > highScore) {
+	                        	wIndx = idx;
+	                        	highScore = score;
+	                        }
+
+							console.log(idx + ": " + title + " " + score);
+	                    });
+
+	                    if (wIndx != -1) {
+	                    	json.id_yt = ytjson.items[wIndx].id.videoId;
+	                    	musics.requests.push(json);
+	                    }
+	                    else {
+					        $.ajax({
+					        	dataType: 'json'
+					        	, url: 'message'
+									, type: 'POST'
+									, data: JSON.stringify({"msg": "Sorry @" + json.requester + ", but no results found for '" + json.query + "'.  Try using a URL instead." })
+									// , success: function(res) {  }
+						        });
+	                    }
+	                }
+	                else {
+				        $.ajax({
+				        	dataType: 'json'
+				        	, url: 'message'
+								, type: 'POST'
+								, data: JSON.stringify({"msg": "Sorry @" + json.requester + ", but no results found for '" + json.query + "'.  Try using a URL instead." })
+								// , success: function(res) {  }
+					        });
+	                }
+	          	}
+				, error: function (err) {
+			        $.ajax({
+			        	dataType: 'json'
+			        	, url: 'message'
+						, type: 'POST'
+						, data: JSON.stringify({"msg": "Sorry @" + request.requester + ", but there was a youtube search error."})
+			        });
+				}
+	        });
+
+		}
+
+		musics.requests = [];
+		musics.ytRequest = function([request]) {
+			console.log('ytRequest()', request);
+
+	        $.ajax({
+	          dataType: 'json'
+	          , url:                          // youtube API v3
+	            'https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,status'
+	            // + (request.is_userLimited && !request.is_mod ? ",statistics" : "")
+	            + '&key=' + YOUTUBE_API_KEY
+	            + '&id=' + encodeURIComponent(request.id_yt)
+
+				, success: function(ytjson) {
+					if (ytjson.items == null || ytjson.items[0] == null || ytjson.items[0].status == null) return;
+
+		          	let details = ytjson.items[0];
+		            console.log('youtube yay', details);
+
+		            if (!details.status.embeddable) {
+				        $.ajax({
+				        	dataType: 'json'
+				        	, url: 'message'
+							, type: 'POST'
+							, data: JSON.stringify({"msg": "Sorry @" + request.requester + ", but that video isn't embeddable."})
+							// , success: function(res) {  }
+				        });
+		            }
+		            else if (
+		            	details.contentDetails.contentRating !== undefined
+		            	&& details.contentDetails.contentRating.ytRating == "ytAgeRestricted"
+		            ) {
+				        $.ajax({
+				        	dataType: 'json'
+				        	, url: 'message'
+								, type: 'POST'
+								, data: JSON.stringify({"msg": "Sorry @" + request.requester + ", but that video is age restricted and won't embed."})
+								// , success: function(res) {  }
+					        });
+		            }
+		            else if (	// privacyStatus :  "public"
+		            	details.status !== undefined
+		            	&& details.status.privacyStatus != "public"
+		            	&& details.status.privacyStatus != "unlisted"
+		            ) {
+				        $.ajax({
+				        	dataType: 'json'
+				        	, url: 'message'
+								, type: 'POST'
+								, data: JSON.stringify({"msg": "Sorry @" + request.requester + ", but that video is private and won't embed."})
+								// , success: function(res) {  }
+					        });
+		            }
+		            else if (	
+		            	details.snippet !== undefined
+		            	&& details.snippet.liveBroadcastContent !== undefined
+		            	&& details.snippet.liveBroadcastContent == "live"
+		            ) {
+				        $.ajax({
+				        	dataType: 'json'
+				        	, url: 'message'
+								, type: 'POST'
+								, data: JSON.stringify({"msg": "Sorry @" + request.requester + ", but livestreams aren't allowed."})
+								// , success: function(res) {  }
+					        });
+		            }
+		            else {		            	
+		            	let ytChannel = details.snippet.channelTitle.replace(/ and /gi, ' & ').replace(/"/g, '').replace(' - Topic', '');
+		            	if (ytChannel.substr(-4) == "VEVO")
+		            		ytChannel = ytChannel.substr(0, ytChannel.length - 4).trim();
+		            	else if (ytChannel.substr(0, 9) == "Official ")
+		            		ytChannel = ytChannel.substr(9).trim();
+		            	else if (ytChannel.substr(-8) == "Official")
+		            		ytChannel = ytChannel.substr(0, ytChannel.length - 8).trim();
+		            	else if (ytChannel.substr(-7) == "channel")
+		            		ytChannel = ytChannel.substr(0, ytChannel.length - 7).trim();
+
+		            	let ytTitle = details.snippet.title;      	
+		            	let ytDesc = details.snippet.description;
+		            	request.seconds = parseInt(details.contentDetails.duration.toSS()) - request.startSeconds;
+
+		            	if (request.seconds <= 100) request.is_video = true;
+		            	else {
+			            	let tit = ytTitle.toLowerCase();
+			            	let desc = ytDesc.toLowerCase();
+
+			            	request.is_video = false;
+			            	// if (tit.indexOf('video') != -1 && tit.indexOf('lyric') == -1) request.is_video = true;
+			            	if (tit.indexOf('video') != -1) request.is_video = true;
+			            	else if (tit.indexOf('concert') != -1) request.is_video = true;
+			            	else if (tit.indexOf('mv') != -1) request.is_video = true;
+			            	else if (tit.indexOf('pv') != -1) request.is_video = true;
+			            	else if (desc.indexOf('music video') != -1) request.is_video = true;
+			            	else if (desc.indexOf('official video') != -1) request.is_video = true;
+			            	else if (tit.indexOf('visua') != -1) request.is_video = true;
+			            	else if (desc.indexOf('visua') != -1) request.is_video = true;
+			            	else if (tit.indexOf('live') != -1 && tit.indexOf('alive') == -1) request.is_video = true;
+			            	else if (tit.indexOf('studio') != -1) request.is_video = true;
+			            	else if (tit.indexOf('perform') != -1) request.is_video = true;
+			            	else if (tit.indexOf('like a version') != -1) request.is_video = true;
+			            	// else if (desc.indexOf('director') != -1) request.is_video = true;
+			            	else if (desc.indexOf('directed') != -1) request.is_video = true;
+			            	else if (desc.indexOf('animated') != -1) request.is_video = true;
+			            	else if (desc.indexOf('filmed') != -1) request.is_video = true;
+			            	else if (desc.indexOf('video by') != -1) request.is_video = true;
+			            	// else if (desc.indexOf('live') != -1) request.is_video = true;
+			            	else if (details.contentDetails.caption == "true") request.is_video = true; 	// is actually in quotes
+		            	}
+
+		            	if (ytDesc.indexOf("Provided to YouTube by ") == 0 && ytDesc.split(" · ").length > 1) {
+		            		let sp = details.snippet.description.split("\n");
+		            		if (sp[2].indexOf(" · ") != -1) {
+		            			let spsp = sp[2].split(" · ");
+		            			request.song = spsp[0].replace(/ - /g, " / ");
+		            			request.artist = spsp[1].replace(/ and /gi, ' & ').replace(/^the\s/i, "").split(" / ")[0].trim();
+		            			request.title = fixTitle(request.artist + ' - ' + request.song);
+		            		}
+		            	}
+
+		            	if (request.title == "") {	// if we didn't get it from the description, parse the title
+							ytTitle = ytTitle.replace(/\(([^)]*)\)/g, (match, group) => {	
+								let cleaned = group.replace(/ - /g, ""); // remove all " - " inside parentheses
+								return `(${cleaned})`;
+							});
+			            	request.title = fixTitle(ytTitle);
+
+			            	if (request.title.indexOf(' - ') == -1)
+			            		request.title = fixTitle(ytChannel + ' - ' + request.title);
+
+			            	if (request.title.toLowerCase().substr(0, 4) == "the ")
+			            		request.title = request.title.substr(4).trim();
+			            	if (request.title.toLowerCase().substr(-3) == " hd" || request.title.toLowerCase().substr(-3) == " hq")
+			            		request.title = request.title.substr(0, request.title.length - 3).trim();
+
+			            	while (request.title.split(' - ').length > 2)
+			            		request.title = request.title.substr(0, request.title.lastIndexOf(' - '));
+
+			            	let titleSplit = request.title.split(' - ');
+			            	request.artist = titleSplit[0].trim();
+			            	if (titleSplit.length > 1)
+			            		request.song = titleSplit[1].trim();
+			            	else request.song = "";
+		            	}
+
+	            		if (request.song && request.artist && request.song.indexOf(request.artist + ' ') == 0) {
+	            			request.song = request.song.replace(request.artist, '').trim();
+	            			request.title = request.artist + " - " + request.song;
+	            		}
+
+		            	request.title = request.title.replace(/\?\?/g, "?").replace(/"/g, '').replace(/[-\s(\[:]+$/, '').trim();
+		            	request.artist = request.artist.replace(/\?\?/g, "?").replace(/"/g, '').replace(/[-\s(\[:]+$/, '').trim();
+		            	request.song = request.song.replace(/\?\?/g, "?").replace(/"/g, '').replace(/[-\s(\[:]+$/, '').trim();
+
+						if (	
+			            	details.contentDetails !== undefined
+			            	&& details.contentDetails.regionRestriction !== undefined
+			            	&& (
+			            		(
+				            		details.contentDetails.regionRestriction.allowed !== undefined
+				            		&& !details.contentDetails.regionRestriction.allowed.includes(COUNTRY_CODE)
+				            	)
+			            		|| (
+			            			details.contentDetails.regionRestriction.blocked !== undefined
+		            				&& details.contentDetails.regionRestriction.blocked.includes(COUNTRY_CODE)
+		            			)
+			            	)
+			            ) {
+							request.id_yt = "";
+							request.query =  request.artist + ' ' + request.song;
+console.log('region search', request);
+			            	// musics.requests.push(request);
+							musics.ytSearch(request);
+				        }
+				        else
+					        $.ajax({
+					        	dataType: 'json'
+					        	, url: 'queue'
+								, type: 'POST'
+								, data: JSON.stringify(request)
+								// , success: function(res) { }
+					        });
+		            }
+	          	}
+				, error: function (err) {
+			        $.ajax({
+			        	dataType: 'json'
+			        	, url: 'message'
+						, type: 'POST'
+						, data: JSON.stringify({"msg": "Sorry @" + request.requester + ", but there was a youtube error.  Is your URL valid?"})
+			        });
+				}
+
+	        });
+		}
+
+		$(document).ready(function() {
+	        var tag = document.createElement('script');
+	        tag.src = "https://www.youtube.com/iframe_api";
+	        var firstScriptTag = document.getElementsByTagName('script')[0];
+	        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+	        // Server ping!
+			setInterval(async function() {
+				// if ($.active > 0) return;
+				// else
+				if (musics.requests.length) {
+					musics.ytRequest(musics.requests.splice(0, 1));
+            		return;
+            	}
+
+		        $.ajax({
+		          dataType: 'json'
+		          , url: '/ping'
+
+		          , success: function(json) {
+		            if (json.result == "pong") {
+		            	console.log('pong');
+		            	return;
+		            } 
+
+		            console.log('ajax yay', json);
+
+		            // try {	// if someone's favorting before 10 seconds, give 'em the last
+		            // if (json.result == "favorite" && musics.lastSong.title && musics.lastSong.id_yt) {
+	    			// 	let cur = musics.yt.getCurrentTime();
+
+	    			// 	if (cur > 0 & cur < 16)
+			        //     	json.result = "favoritelast";
+		            // }
+		            // } catch (e) {}
+
+		            if (json.result == "request") {
+		            	let req = {
+		            		"requester" : json.requester
+		            		, "id_yt" : json.id_yt
+		            		, "query" : json.query
+ 		            		// , "ytChannel" : ""
+		            		// , "ytTitle" : ""
+		            		, "title" : ""
+		            		, "artist" : ""
+		            		, "song" : ""
+		            		, "chatReply" : true
+		            		, "seconds" : 0
+		            		, "startSeconds" : json.startSeconds
+		            		, "is_latest" : true
+		            		, "is_mod" : false
+		            		// , "is_video" : false
+		            	};
+		            	if (json.chatReply !== undefined) req.chatReply = json.chatReply;
+		            	if (json.next !== undefined) req.next = json.next;
+		            	if (json.is_mod !== undefined) req.is_mod = json.is_mod;
+		            	if (json.is_userLimited !== undefined) req.is_userLimited = json.is_userLimited;
+
+
+		            	if (json.id_yt != '') musics.requests.push(req);
+		            	else if (json.query != '') musics.ytSearch(req);
+		            	else if (json.id_pl != '') {
+			                $.ajax({
+			                    dataType: 'json'
+			                    , url:                          // youtube API v3
+			                      'https://www.googleapis.com/youtube/v3/playlistItems?part=status,contentDetails'
+			                      + '&maxResults=50&key=' + YOUTUBE_API_KEY
+			                      + '&playlistId=' + encodeURIComponent(json.id_pl)
+
+			                    , success: function(pljson) {
+			                      console.log('youtube pl yay', pljson);
+
+			                        $.each(pljson.items, function(idx, vid) {
+			                          if (vid.status.privacyStatus != 'private') {
+			                          	let newReq = { ...req };
+			                          	newReq.id_yt = vid.contentDetails.videoId;
+			                          	musics.requests.push(newReq);
+			                          }
+			                        });
+		            			}
+			                });
+		            	}
+		            	else {
+							$.ajax({
+								dataType: 'json'
+								, url: 'message'
+								, type: 'POST'
+								, data: JSON.stringify({"msg": "Error adding request from @" + json.requester + ", no search terms or youtube ID found."})
+								// , success: function(res) {  }
+							});
+		            	}
+		            }	// end: if (result == request)
+		            else if (json.result == "favorite") {
+						if (musics.song.title && musics.song.id_yt && DISCORD_SERVER_ID && DISCORD_CHANNEL_ID) {
+							let thread = '';
+							if (DISCORD_UNSORTED_THREAD_ID) thread = '?thread_id=' + DISCORD_UNSORTED_THREAD_ID;
+
+							let msg = '[' + musics.song.title + "](https://youtu.be/" + musics.song.id_yt + ")";
+							if (userThreads[json.userName]) thread = '?thread_id=' + userThreads[json.userName];
+							else msg = json.userName + ' ' + msg;
+							if (json.comment) msg = json.comment + '\n' + msg;
+							if (musics.song.requester) msg += " (req by " + musics.song.requester + ")";
+							if (json.userName != musics.song.requester && !musics.song.votes.includes(json.userName))
+								musics.song.votes.push(json.userName);
+
+							$.ajax({
+								url:
+									'https://discord.com/api/webhooks/' + DISCORD_SERVER_ID + '/' + DISCORD_CHANNEL_ID
+									+ thread
+								, method: 'POST'
+								, contentType: 'application/json'
+								, data: JSON.stringify({
+									content: msg.trim()
+									, username: 'RRMRry'
+									, avatar_url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/a60f073c-e3b3-4dec-b2de-fcc36b996045-profile_image-300x300.png'
+								})
+							})
+							.done(function() { console.log('Posted to thread successfully'); })
+							.fail(function(jqXHR, textStatus, errorThrown) { console.error('Failed to post:', textStatus, errorThrown); })
+							;
+
+
+							$.ajax({
+								dataType: 'json'
+								, url: 'favorite'
+								, type: 'POST'
+								, data: JSON.stringify({
+									"userName": json.userName
+									, "title": musics.song.title
+									, "id_yt": musics.song.id_yt
+									, "requester": musics.song.requester
+								})
+							});
+						}
+		            }	// end: if (result == favorite)
+		            else if (json.result == "favoritelast") {
+						if (musics.lastSong.title && musics.lastSong.id_yt && DISCORD_SERVER_ID && DISCORD_CHANNEL_ID) {
+							let thread = '';
+							if (DISCORD_UNSORTED_THREAD_ID) thread = '?thread_id=' + DISCORD_UNSORTED_THREAD_ID;
+
+							let msg = '[' + musics.lastSong.title + "](https://youtu.be/" + musics.lastSong.id_yt + ")";
+							if (userThreads[json.userName]) thread = '?thread_id=' + userThreads[json.userName];
+							else msg = json.userName + ' ' + msg;
+							if (json.comment) msg = json.comment + '\n' + msg;
+							if (musics.lastSong.requester) msg += " (req by " + musics.lastSong.requester + ")";
+							if (json.userName != musics.lastSong.requester && !musics.lastSong.votes.includes(json.userName))
+								musics.lastSong.votes.push(json.userName);
+
+							$.ajax({
+								url:
+									'https://discord.com/api/webhooks/' + DISCORD_SERVER_ID + '/' + DISCORD_CHANNEL_ID
+									+ thread
+								, method: 'POST'
+								, contentType: 'application/json'
+								, data: JSON.stringify({
+									content: msg.trim()
+									, username: 'RRMRry'
+									, avatar_url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/a60f073c-e3b3-4dec-b2de-fcc36b996045-profile_image-300x300.png'
+								})
+							})
+							.done(function() { console.log('Posted to thread successfully'); })
+							.fail(function(jqXHR, textStatus, errorThrown) { console.error('Failed to post:', textStatus, errorThrown); })
+							;
+
+							$.ajax({
+								dataType: 'json'
+								, url: 'favorite'
+								, type: 'POST'
+								, data: JSON.stringify({
+									"userName": json.userName
+									, "title": musics.lastSong.title
+									, "id_yt": musics.lastSong.id_yt
+									, "requester": musics.lastSong.requester
+								})
+							});
+						}
+		            }	// end: if (result == favoritelast)
+
+		            else if (json.result == "shutdown") {
+		            	musics.yt.pauseVideo();
+		            	musics.doBreak = true;
+		            }	// end: if (result == shutdown)
+
+		            else if (json.result == "play") musics.yt.playVideo();
+		            else if (json.result == "pause") musics.yt.pauseVideo();
+
+		            else if (json.result == "break") musics.doBreak = true;
+		            else if (json.result == "unbreak") musics.doBreak = false;
+
+		            else if (json.result == "label") $("#wrapper-label").fadeIn(3000);
+		            else if (json.result == "nolabel") $("#wrapper-label").stop().fadeOut(3000);
+
+		            else if (json.result == "video") {
+						$('#wrapper-youtube').animate(musics.ytFull, 1111, 'linear');
+		            	// $("#wrapper-youtube").stop().fadeIn(3000);
+		            }
+		            else if (json.result == "novideo") {
+						$('#wrapper-youtube').animate(musics.ytCompact, 1111, 'linear');
+		            	// $("#wrapper-youtube").stop().fadeOut(3000);
+		            }
+
+		            else if (json.result == "nudge") {
+		            	let n = Math.ceil(musics.yt.getCurrentTime());
+	    				if (!$.isNumeric(n) || (n + 3) >= musics.yt.getDuration())
+	    					requestNext();
+		            }
+
+		            else if (json.result == "skip") {
+		            	musics.doBreak = false;
+
+	    				let cur = musics.yt.getCurrentTime();
+	    				let dur = musics.yt.getDuration();
+
+	    				// $("#progress").width((cur / dur) * 100 + '%');
+	    				if ($.isNumeric(cur) && $.isNumeric(dur) && dur > 0) {
+    						let dif = dur - cur;
+    						if (dif <= 3) requestNext();
+		            		else {
+    							$("#wrapper-youtube").stop().fadeOut(3000);
+    							setTimeout(function() { requestNext(); }, 3000);
+
+    							for (var i = 99; i > 0; i--)
+    								setTimeout(function(q) { musics.yt.setVolume(q); }, (100 - i) * 30, i);
+		            		}
+	    				}
+	    				else { 
+	    					// $('#wrapper-youtube').stop().css({ opacity: 0 });
+	    					requestNext();
+		            	}
+		            }
+		            else if (json.result == "spin") {
+		            	let trans = $("#wrapper-youtube").css('transform');
+		            	if (trans == 'none' || trans == 'matrix(1, 0, 0, 1, 0, 0)') {
+		            		if (Math.floor(Math.random() * 2) == 0)
+				            	$("#wrapper-youtube").animate({transform:"rotate(-180deg)"}, 10000);
+				            else
+				            	$("#wrapper-youtube").animate({transform:"rotate(180deg)"}, 10000);
+		            	}
+			            else
+			            	$("#wrapper-youtube").animate({transform:"rotate(0deg)"});
+		            }
+		            else if (json.result == "invert") {
+		            	let filt = $("#wrapper-youtube").css('filter');
+		            	if (filt == 'none' || filt == 'invert(0)')
+			            	$("#wrapper-youtube").css({filter:"invert(100%)"}, 5000);
+		            	else
+			            	$("#wrapper-youtube").css({filter:"invert(0)"}, 5000);
+		            }
+		            else if (json.result == "sound") {
+						var audio = new Audio("sounds/" + json.file + ".mp3");
+						audio.volume = 0.11;
+						audio.play();
+		            }
+		            else if (json.result == "image") {
+		            	$("#showImage").attr('src', json.file).fadeIn(2222);
+		            	setTimeout(function() {
+		            		$("#showImage").fadeOut(2222);
+		            	}, 7777);
+		            }
+		          }
+		        });
+			}, 1111);	
+		});	// end: $(document).ready()
+   	</script>
+</html>
