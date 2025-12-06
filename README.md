@@ -83,7 +83,7 @@ Playlister expects something to be shown behind it, so its background is that of
 
 * ``!songrequest [@username] <request>``
   
-**Shortcuts: !sr**
+**Shortcuts: !sr**  
 Admins can make requests for other users by using the syntax ``!sr @username https://youtu.be/url`` or ``!sr @username search terms``.
 
 Admins can also request full youtube playlists by using a playlist URL.  E.g. ``!sr https://www.youtube.com/playlist?list=PLGI55acJeEwPEtC3hkRoc7ZqKdrD0fsru``.  Only the first 50 videos of a playlist can be added this way.
