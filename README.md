@@ -90,7 +90,7 @@ Admins can also request full youtube playlists by using a playlist URL.  E.g. ``
 
 * ``!queuenext [@username] <request>``
   
-**Shortcuts: !qn ``**  
+**Shortcuts: !qn**  
 Same as ``!songrequest`` but automatically queues the request up next.
 
 
