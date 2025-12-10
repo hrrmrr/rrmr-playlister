@@ -252,22 +252,6 @@ function countFiles(dirPath) {
   }
 }
 
-/*
-function getRandomCuteness() {
-    try {
-    	let dirPath = "./cute";
-        const files = fs.readdirSync(dirPath); // Read directory contents
-        if (files.length === 0) {
-            throw new Error('Directory is empty');
-        }
-        const randomFile = files[Math.floor(Math.random() * files.length)]; // Pick a random file
-        return path.join(dirPath, randomFile); // Return full path
-    } catch (err) {
-        console.error('Error:', err.message);
-        return null;
-    }
-}
-*/
 
 // Start executing the bot from here
 (async () => {
@@ -1813,6 +1797,7 @@ http.createServer((req, res) => {
 
 			let jsonData = JSON.parse(body);
 			if (jsonData.chatReply != false) jsonData.chatReply = true;
+			replyok(res);
 
 			// Check for duplicate vids
 			let dupeIdx = -1;
@@ -2085,8 +2070,6 @@ http.createServer((req, res) => {
 
 				if (jsonData.autoplay) commands.push({ "result" : "nudge" });
 			}
-
-			replyok(res);
 		});
 	}
 
@@ -2144,3 +2127,4 @@ http.createServer((req, res) => {
 		});
 	}
 }).listen(80);
+
