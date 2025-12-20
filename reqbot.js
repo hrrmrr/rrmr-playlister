@@ -318,18 +318,21 @@ function startWebSocketClient() {
 	websocketClient.on('error', console.error);
 
 	websocketClient.on('open', () => { 
-		clearTimeout(reconnectTimeout);
+		clearInterval(reconnectTimeout);
 		console.log('WebSocket connection opened to Twitch.'); 
 	});
 
 	websocketClient.on('close', () => { 
-		console.log('WebSocket connection closed!  Reconnecting in ' + Math.round(LATENCY_MS / 1000) + ' sec.'); 
+		console.log('WebSocket connection closed!  Reconnecting in 10 sec.'); 
 
-		clearTimeout(reconnectTimeout);
-		reconnectTimeout = setTimeout(function() { startWebSocketClient(); }, LATENCY_MS);
+		clearInterval(reconnectTimeout);
+		reconnectTimeout = setInterval(function() { startWebSocketClient(); }, 10000);
 	});
 
-	websocketClient.on('message', (data) => { handleWebSocketMessage(JSON.parse(data.toString())); });
+	websocketClient.on('message', (data) => {
+		clearInterval(reconnectTimeout);
+		handleWebSocketMessage(JSON.parse(data.toString())); 
+	});
 
 	// return websocketClient;
 }
@@ -2127,4 +2130,5 @@ http.createServer((req, res) => {
 		});
 	}
 }).listen(80);
+
 
