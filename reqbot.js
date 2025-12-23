@@ -330,7 +330,7 @@ function startWebSocketClient() {
 	});
 
 	websocketClient.on('message', (data) => {
-		clearInterval(reconnectTimeout);
+		// clearInterval(reconnectTimeout);
 		handleWebSocketMessage(JSON.parse(data.toString())); 
 	});
 
@@ -2130,5 +2130,6 @@ http.createServer((req, res) => {
 		});
 	}
 }).listen(80);
+
 
 
